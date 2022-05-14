@@ -1,0 +1,378 @@
+// Stata 14.2 script - PNP and RAIS //
+// This is part of CMAP-CMAG-RFEPCT Project //
+// 2nd Research Question - 2nd Report //
+// Date: 2022 //
+// Disoc-Ipea //
+
+// Step 1: Defining options //
+
+cd "RFEPCT"
+set dp comma
+
+
+// Step 2: Loading datasets - selected variables //
+
+use cpf emp_31dez nat_jur2016 clas_cnae20 cbo2002 temp_emp rem_med_r using "Brasil2017.dta"
+save "R_2017.dta"
+
+use cpf emp_31dez nat_jur2018 clas_cnae20 cbo2002 temp_emp rem_med_r using "Brasil2018.dta"
+save "R_2018.dta"
+
+use cpf emp_31dez nat_jur2018 clas_cnae20 cbo2002 temp_emp rem_med_r using "Brasil2019.dta"
+save "R_2019.dta"
+
+import excel "CGU_PNP2019_02.xlsx", sheet("PNP2019") firstrow clear
+rename NúmeroCPF cpf_a
+gsort +cpf_a
+keep if ((NomeCurso == "Ciências Biológicas") | (NomeCurso == "Ciências da Natureza") | (NomeCurso == "Física") | (NomeCurso == "Matemática") | (NomeCurso == "Química")) & (TipoCurso == "Licenciatura")
+save "PNP_2019.dta", replace // Obs.:PNP_2019.dta refers to 2018 //
+
+
+// Step 3: Dropping duplicated cases - PNP_2018 //
+
+use "PNP_2019.dta", clear
+gsort +cpf_a -CoMatricula
+by cpf_a: generate duplicate = cond(_N==1, 0, _n)
+drop if (duplicate > 1) 
+save "PNP_2019.dta", replace
+
+
+// Step 4: Merging datasets (RAIS + PNP / Year by year) //
+
+use "R_2017.dta", clear
+destring (cpf), generate (cpf_a)
+gsort +cpf_a
+merge m:1 cpf_a using "PNP_2019.dta"
+keep if (_merge == 3)
+save "PNP_2019_R_2017.dta", replace
+
+use "R_2018.dta", clear
+destring (cpf), generate (cpf_a)
+gsort +cpf_a
+merge m:1 cpf_a using "PNP_2019.dta"
+keep if (_merge == 3)
+save "PNP_2019_R_2018.dta", replace
+
+use "R_2019.dta", clear
+destring (cpf), generate (cpf_a)
+gsort +cpf_a
+merge m:1 cpf_a using "PNP_2019.dta"
+keep if (_merge == 3)
+save "PNP_2019_R_2019.dta", replace
+
+
+// Step 5: Renaming variables //
+
+use "PNP_2019_R_2017.dta", clear
+drop CursodeFormaçãodeProfessores duplicate _merge
+rename * *_2017
+save "PNP_2019_R_2017.dta", replace
+
+use "PNP_2019_R_2018.dta", clear
+drop CursodeFormaçãodeProfessores duplicate _merge
+rename * *_2018
+save "PNP_2019_R_2018.dta", replace
+
+use "PNP_2019_R_2019.dta", clear
+drop CursodeFormaçãodeProfessores duplicate _merge
+rename * *_2019
+save "PNP_2019_R_2019.dta", replace
+
+
+// Step 6: Dropping duplicated cases (multiple labour contracts), according to wages (the main contract is defined by wage) //
+
+use "PNP_2019_R_2017.dta", clear
+gsort +cpf_a_2017 -rem_med_r_2017
+by cpf_a_2017: generate duplicate = cond(_N==1, 0, _n)
+drop if (duplicate > 1) 
+save "PNP_2019_R_2017.dta", replace
+
+use "PNP_2019_R_2018.dta", clear
+gsort +cpf_a_2018 -rem_med_r_2018
+by cpf_a_2018: generate duplicate = cond(_N==1, 0, _n)
+drop if (duplicate > 1) 
+save "PNP_2019_R_2018.dta", replace
+
+use "PNP_2019_R_2019.dta", clear
+gsort +cpf_a_2019 -rem_med_r_2019
+by cpf_a_2019: generate duplicate = cond(_N==1, 0, _n)
+drop if (duplicate > 1)
+save "PNP_2019_R_2019.dta", replace
+
+
+// Step 7: Renaming CPF variables //
+
+use "PNP_2019_R_2017.dta", clear
+drop cpf_a duplicate
+generate double cpf_a = cpf_a_2017
+gsort +cpf_a
+save "PNP_2019_R_2017.dta", replace
+
+use "PNP_2019_R_2018.dta", clear
+drop cpf_a duplicate
+generate double cpf_a = cpf_a_2018
+gsort +cpf_a
+save "PNP_2019_R_2018.dta", replace
+
+use "PNP_2019_R_2019.dta", clear
+drop cpf_a duplicate
+generate double cpf_a = cpf_a_2019
+gsort +cpf_a
+save "PNP_2019_R_2019.dta", replace
+
+
+// Step 8: Merging datasets (RAIS + PNP / All years) //
+
+use "PNP_2019_R_2017.dta", clear
+merge 1:1 cpf_a using "PNP_2019_R_2018.dta"
+drop _merge
+gsort +cpf_a
+save "PNP_2019_R_2017_2018.dta", replace
+
+use "PNP_2019_R_2017_2018.dta", clear
+merge 1:1 cpf_a using "PNP_2019_R_2019.dta"
+drop _merge
+gsort +cpf_a
+save "PNP_2019_R_2017_2018_2019.dta", replace
+
+
+// Step 9: Recoding, creating and labelling variables //
+
+use "PNP_2019_R_2017_2018_2019.dta", clear
+
+foreach var in cpf_a_2017 cpf_a_2018 cpf_a_2019 {
+generate `var'_b = `var' 
+}
+
+foreach var in cpf_a_2017_b cpf_a_2018_b cpf_a_2019_b {
+recode `var' (. = 0)(0/99999999999 = 1)
+}
+
+label define l_vinc_assal 0 "Não" 1 "Sim", modify
+
+foreach var in cpf_a_2017_b cpf_a_2018_b cpf_a_2019_b {
+label variable `var' "Se possuía vínculo assalariado"
+label value `var' l_vinc_assal
+}
+
+foreach var in nat_jur2016_2017 nat_jur2018_2018 nat_jur2018_2019 {
+destring (`var'), generate (`var'_a)
+}
+
+recode nat_jur2016_2017_a (1015/1082 = 0)(1104/1279 = 1)(2011/2038 = 2)(2046/2321 = 3)(2330/5037 = 4)
+recode nat_jur2018_2018_a (1015/1082 = 0)(1104/1341 = 1)(2011/2038 = 2)(2046/2321 = 3)(2330/5037 = 4)
+recode nat_jur2018_2019_a (1015/1082 = 0)(1104/1341 = 1)(2011/2038 = 2)(2046/2321 = 3)(2330/5037 = 4)
+
+label define l_nat_jur 0 "Órg.Públ. - Exec./Leg./Jud. - Fed./Est./Mun." 1 "Ent.Públ. - Fed./Est./Mun." 2 "Empr.Públ. - Fed./Est./Mun." 3 "Empr.Priv." 4 "Ent.Priv.", modify
+
+foreach var in nat_jur2016_2017_a nat_jur2018_2018_a nat_jur2018_2019_a {
+label variable `var' "Natureza jurídica do estabelecimento de vínculo"
+label value `var' l_nat_jur
+}
+
+generate se_doc_ens_bas_2017 = 0 if cpf_a_2017_b == 1
+generate se_doc_ens_bas_stem_2017 = 0 if cpf_a_2017_b == 1
+generate se_doc_ens_bas_publ_2017 = 0 if cpf_a_2017_b == 1
+generate se_doc_ens_bas_publ_stem_2017 = 0 if cpf_a_2017_b == 1
+generate se_doc_ens_bas_2018 = 0 if cpf_a_2018_b == 1
+generate se_doc_ens_bas_stem_2018 = 0 if cpf_a_2018_b == 1
+generate se_doc_ens_bas_publ_2018 = 0 if cpf_a_2018_b == 1
+generate se_doc_ens_bas_publ_stem_2018 = 0 if cpf_a_2018_b == 1
+generate se_doc_ens_bas_2019 = 0 if cpf_a_2019_b == 1
+generate se_doc_ens_bas_stem_2019 = 0 if cpf_a_2019_b == 1
+generate se_doc_ens_bas_publ_2019 = 0 if cpf_a_2019_b == 1
+generate se_doc_ens_bas_publ_stem_2019 = 0 if cpf_a_2019_b == 1
+
+replace se_doc_ens_bas_2017 = 1 if (cbo2002_2017 == "231205" | cbo2002_2017 == "231210" | cbo2002_2017 == "231320" | cbo2002_2017 == "231325" | ///
+	cbo2002_2017 == "231330" | cbo2002_2017 == "231335" | cbo2002_2017 == "231340" | cbo2002_2017 == "231310" | cbo2002_2017 == "231305" | ///
+	cbo2002_2017 == "231315" | cbo2002_2017 == "232110" | cbo2002_2017 == "232115" | cbo2002_2017 == "232140" | cbo2002_2017 == "232150" | cbo2002_2017 == "232160" | ///
+	cbo2002_2017 == "232165" | cbo2002_2017 == "232105" | cbo2002_2017 == "232120" | cbo2002_2017 == "232125" | cbo2002_2017 == "232130" | cbo2002_2017 == "232135" | ///
+	cbo2002_2017 == "232145" | cbo2002_2017 == "232155" | cbo2002_2017 == "232170" | cbo2002_2017 == "331205")
+
+replace se_doc_ens_bas_stem_2017 = 1 if (cbo2002_2017 == "231340" | cbo2002_2017 == "231305" | cbo2002_2017 == "232110" | cbo2002_2017 == "232165" | ///
+	cbo2002_2017 == "232130" | cbo2002_2017 == "232155")
+
+replace se_doc_ens_bas_publ_2017 = 1 if ((cbo2002_2017 == "231205" | cbo2002_2017 == "231210" | cbo2002_2017 == "231320" | cbo2002_2017 == "231325" | ///
+	cbo2002_2017 == "231330" | cbo2002_2017 == "231335" | cbo2002_2017 == "231340" | cbo2002_2017 == "231310" | cbo2002_2017 == "231305" | ///
+	cbo2002_2017 == "231315" | cbo2002_2017 == "232110" | cbo2002_2017 == "232115" | cbo2002_2017 == "232140" | cbo2002_2017 == "232150" | cbo2002_2017 == "232160" | ///
+	cbo2002_2017 == "232165" | cbo2002_2017 == "232105" | cbo2002_2017 == "232120" | cbo2002_2017 == "232125" | cbo2002_2017 == "232130" | cbo2002_2017 == "232135" | ///
+	cbo2002_2017 == "232145" | cbo2002_2017 == "232155" | cbo2002_2017 == "232170" | cbo2002_2017 == "331205") & (nat_jur2016_2017_a == 0 | nat_jur2016_2017_a == 1 | nat_jur2016_2017_a == 2))
+
+replace se_doc_ens_bas_publ_stem_2017 = 1 if ((cbo2002_2017 == "231340" | cbo2002_2017 == "231305" | cbo2002_2017 == "232110" | cbo2002_2017 == "232165" | ///
+	cbo2002_2017 == "232130" | cbo2002_2017 == "232155") & (nat_jur2016_2017_a == 0 | nat_jur2016_2017_a == 1 | nat_jur2016_2017_a == 2))
+
+replace se_doc_ens_bas_2018 = 1 if (cbo2002_2018 == "231205" | cbo2002_2018 == "231210" | cbo2002_2018 == "231320" | cbo2002_2018 == "231325" | ///
+	cbo2002_2018 == "231330" | cbo2002_2018 == "231335" | cbo2002_2018 == "231340" | cbo2002_2018 == "231310" | cbo2002_2018 == "231305" | ///
+	cbo2002_2018 == "231315" | cbo2002_2018 == "232110" | cbo2002_2018 == "232115" | cbo2002_2018 == "232140" | cbo2002_2018 == "232150" | cbo2002_2018 == "232160" | ///
+	cbo2002_2018 == "232165" | cbo2002_2018 == "232105" | cbo2002_2018 == "232120" | cbo2002_2018 == "232125" | cbo2002_2018 == "232130" | cbo2002_2018 == "232135" | ///
+	cbo2002_2018 == "232145" | cbo2002_2018 == "232155" | cbo2002_2018 == "232170" | cbo2002_2018 == "331205")
+
+replace se_doc_ens_bas_stem_2018 = 1 if (cbo2002_2018 == "231340" | cbo2002_2018 == "231305" | cbo2002_2018 == "232110" | cbo2002_2018 == "232165" | ///
+	cbo2002_2018 == "232130" | cbo2002_2018 == "232155")
+
+replace se_doc_ens_bas_publ_2018 = 1 if ((cbo2002_2018 == "231205" | cbo2002_2018 == "231210" | cbo2002_2018 == "231320" | cbo2002_2018 == "231325" | ///
+	cbo2002_2018 == "231330" | cbo2002_2018 == "231335" | cbo2002_2018 == "231340" | cbo2002_2018 == "231310" | cbo2002_2018 == "231305" | ///
+	cbo2002_2018 == "231315" | cbo2002_2018 == "232110" | cbo2002_2018 == "232115" | cbo2002_2018 == "232140" | cbo2002_2018 == "232150" | cbo2002_2018 == "232160" | ///
+	cbo2002_2018 == "232165" | cbo2002_2018 == "232105" | cbo2002_2018 == "232120" | cbo2002_2018 == "232125" | cbo2002_2018 == "232130" | cbo2002_2018 == "232135" | ///
+	cbo2002_2018 == "232145" | cbo2002_2018 == "232155" | cbo2002_2018 == "232170" | cbo2002_2018 == "331205") & (nat_jur2018_2018_a == 0 | nat_jur2018_2018_a == 1 | nat_jur2018_2018_a == 2))
+
+replace se_doc_ens_bas_publ_stem_2018 = 1 if ((cbo2002_2018 == "231340" | cbo2002_2018 == "231305" | cbo2002_2018 == "232110" | cbo2002_2018 == "232165" | ///
+	cbo2002_2018 == "232130" | cbo2002_2018 == "232155") & (nat_jur2018_2018_a == 0 | nat_jur2018_2018_a == 1 | nat_jur2018_2018_a == 2))
+
+replace se_doc_ens_bas_2019 = 1 if (cbo2002_2019 == "231205" | cbo2002_2019 == "231210" | cbo2002_2019 == "231320" | cbo2002_2019 == "231325" | ///
+	cbo2002_2019 == "231330" | cbo2002_2019 == "231335" | cbo2002_2019 == "231340" | cbo2002_2019 == "231310" | cbo2002_2019 == "231305" | ///
+	cbo2002_2019 == "231315" | cbo2002_2019 == "232110" | cbo2002_2019 == "232115" | cbo2002_2019 == "232140" | cbo2002_2019 == "232150" | cbo2002_2019 == "232160" | ///
+	cbo2002_2019 == "232165" | cbo2002_2019 == "232105" | cbo2002_2019 == "232120" | cbo2002_2019 == "232125" | cbo2002_2019 == "232130" | cbo2002_2019 == "232135" | ///
+	cbo2002_2019 == "232145" | cbo2002_2019 == "232155" | cbo2002_2019 == "232170" | cbo2002_2019 == "331205")
+
+replace se_doc_ens_bas_stem_2019 = 1 if (cbo2002_2019 == "231340" | cbo2002_2019 == "231305" | cbo2002_2019 == "232110" | cbo2002_2019 == "232165" | ///
+	cbo2002_2019 == "232130" | cbo2002_2019 == "232155")
+
+replace se_doc_ens_bas_publ_2019 = 1 if ((cbo2002_2019 == "231205" | cbo2002_2019 == "231210" | cbo2002_2019 == "231320" | cbo2002_2019 == "231325" | ///
+	cbo2002_2019 == "231330" | cbo2002_2019 == "231335" | cbo2002_2019 == "231340" | cbo2002_2019 == "231310" | cbo2002_2019 == "231305" | ///
+	cbo2002_2019 == "231315" | cbo2002_2019 == "232110" | cbo2002_2019 == "232115" | cbo2002_2019 == "232140" | cbo2002_2019 == "232150" | cbo2002_2019 == "232160" | ///
+	cbo2002_2019 == "232165" | cbo2002_2019 == "232105" | cbo2002_2019 == "232120" | cbo2002_2019 == "232125" | cbo2002_2019 == "232130" | cbo2002_2019 == "232135" | ///
+	cbo2002_2019 == "232145" | cbo2002_2019 == "232155" | cbo2002_2019 == "232170" | cbo2002_2019 == "331205") & (nat_jur2018_2019_a == 0 | nat_jur2018_2019_a == 1 | nat_jur2018_2019_a == 2))
+
+replace se_doc_ens_bas_publ_stem_2019 = 1 if ((cbo2002_2019 == "231340" | cbo2002_2019 == "231305" | cbo2002_2019 == "232110" | cbo2002_2019 == "232165" | ///
+	cbo2002_2019 == "232130" | cbo2002_2019 == "232155") & (nat_jur2018_2019_a == 0 | nat_jur2018_2019_a == 1 | nat_jur2018_2019_a == 2))
+
+label define l_se_doc 0 "Não" 1 "Sim", modify
+
+foreach var in se_doc_ens_bas_2017 se_doc_ens_bas_stem_2017 se_doc_ens_bas_publ_2017 se_doc_ens_bas_publ_stem_2017 ///
+se_doc_ens_bas_2018 se_doc_ens_bas_stem_2018 se_doc_ens_bas_publ_2018 se_doc_ens_bas_publ_stem_2018 ///
+se_doc_ens_bas_2019 se_doc_ens_bas_stem_2019 se_doc_ens_bas_publ_2019 se_doc_ens_bas_publ_stem_2019 {
+label value `var' l_se_doc
+}
+
+label variable se_doc_ens_bas_2017 "Se era docente do ensino básico - 2017"
+label variable se_doc_ens_bas_stem_2017 "Se era docente do ensino básico nas áreas específicas - 2017"
+label variable se_doc_ens_bas_publ_2017 "Se era docente do ensino básico público - 2017"
+label variable se_doc_ens_bas_publ_stem_2017 "Se era docente do ensino básico público nas áreas específicas - 2017"
+label variable se_doc_ens_bas_2018 "Se era docente do ensino básico - 2018"
+label variable se_doc_ens_bas_stem_2018 "Se era docente do ensino básico nas áreas específicas - 2018"
+label variable se_doc_ens_bas_publ_2018 "Se era docente do ensino básico público - 2018"
+label variable se_doc_ens_bas_publ_stem_2018 "Se era docente do ensino básico público nas áreas específicas - 2018"
+label variable se_doc_ens_bas_2019 "Se era docente do ensino básico - 2019"
+label variable se_doc_ens_bas_stem_2019 "Se era docente do ensino básico nas áreas específicas - 2019"
+label variable se_doc_ens_bas_publ_2019 "Se era docente do ensino básico público - 2019"
+label variable se_doc_ens_bas_publ_stem_2019 "Se era docente do ensino básico público nas áreas específicas - 2019"
+
+foreach var in cbo2002_2017 cbo2002_2018 cbo2002_2019 {
+destring (`var'), generate (`var'_a)
+}
+
+foreach var in clas_cnae20_2017 clas_cnae20_2018 clas_cnae20_2019 {
+destring (`var'), generate (`var'_a)
+}
+
+foreach var in cbo2002_2017_a cbo2002_2018_a cbo2002_2019_a {
+label value `var' l_cbo
+}
+
+foreach var in clas_cnae20_2017_a clas_cnae20_2018_a clas_cnae20_2019_a {
+label value `var' l_cnae
+}
+
+save "PNP_2019_R_2017_2018_2019.dta", replace
+
+
+// Step 10: Extrating information //
+
+// All categories - "Situação de Matrícula" //
+
+use "PNP_2019.dta", clear
+
+tab1 TipoCurso NomeCurso SituaçãodeMatrícula ModalidadedeEnsino Instituição
+tab1 Sexo FaixaEtária CorRaça RendaFamiliar UF
+
+use "PNP_2019_R_2017_2018_2019.dta", clear
+
+tab1 cpf_a_2017_b cpf_a_2018_b cpf_a_2019_b
+tab1 se_doc_ens_bas_2017 se_doc_ens_bas_stem_2017 se_doc_ens_bas_publ_2017 se_doc_ens_bas_publ_stem_2017
+tab1 se_doc_ens_bas_2018 se_doc_ens_bas_stem_2018 se_doc_ens_bas_publ_2018 se_doc_ens_bas_publ_stem_2018
+tab1 se_doc_ens_bas_2019 se_doc_ens_bas_stem_2019 se_doc_ens_bas_publ_2019 se_doc_ens_bas_publ_stem_2019
+
+tab cbo2002_2017_a if se_doc_ens_bas_2017 != 1, sort
+tab cbo2002_2018_a if se_doc_ens_bas_2018 != 1, sort
+tab cbo2002_2019_a if se_doc_ens_bas_2019 != 1, sort
+
+tab clas_cnae20_2017_a if se_doc_ens_bas_2017 != 1, sort
+tab clas_cnae20_2018_a if se_doc_ens_bas_2018 != 1, sort
+tab clas_cnae20_2019_a if se_doc_ens_bas_2019 != 1, sort
+
+summarize rem_med_r_2017 rem_med_r_2018 rem_med_r_2019, detail
+
+summarize rem_med_r_2017 if se_doc_ens_bas_2017 == 1, detail
+summarize rem_med_r_2018 if se_doc_ens_bas_2018 == 1, detail
+summarize rem_med_r_2019 if se_doc_ens_bas_2019 == 1, detail
+
+summarize rem_med_r_2017 if se_doc_ens_bas_publ_2017 == 1, detail
+summarize rem_med_r_2018 if se_doc_ens_bas_publ_2018 == 1, detail
+summarize rem_med_r_2019 if se_doc_ens_bas_publ_2019 == 1, detail
+
+// Only specific categories - "Situação de Matrícula" ('Integralizada' and 'Concluída') //
+
+use "PNP_2019.dta", clear
+keep if (SituaçãodeMatrícula == "Integralizada" | SituaçãodeMatrícula == "Concluída" )
+gsort +cpf_a
+save "PNP_2019_a.dta", replace
+
+tab1 TipoCurso NomeCurso SituaçãodeMatrícula ModalidadedeEnsino Instituição
+tab1 Sexo FaixaEtária CorRaça RendaFamiliar UF
+
+use "PNP_2019_R_2017_2018_2019.dta", clear
+gsort +cpf_a
+merge 1:1 cpf_a using "PNP_2019_a.dta"
+keep if (_merge == 3)
+
+foreach var in cbo2002_2017 cbo2002_2018 cbo2002_2019 {
+destring (`var'), generate (`var'_a)
+}
+
+foreach var in clas_cnae20_2017 clas_cnae20_2018 clas_cnae20_2019 {
+destring (`var'), generate (`var'_a)
+}
+
+foreach var in cbo2002_2017_a cbo2002_2018_a cbo2002_2019_a {
+label value `var' l_cbo
+}
+
+foreach var in clas_cnae20_2017_a clas_cnae20_2018_a clas_cnae20_2019_a {
+label value `var' l_cnae
+}
+
+save "PNP_2019_R_2017_2018_2019_a.dta", replace
+
+use "PNP_2019_R_2017_2018_2019_a.dta", clear
+
+tab1 cpf_a_2017_b cpf_a_2018_b cpf_a_2019_b
+tab1 se_doc_ens_bas_2017 se_doc_ens_bas_stem_2017 se_doc_ens_bas_publ_2017 se_doc_ens_bas_publ_stem_2017
+tab1 se_doc_ens_bas_2018 se_doc_ens_bas_stem_2018 se_doc_ens_bas_publ_2018 se_doc_ens_bas_publ_stem_2018
+tab1 se_doc_ens_bas_2019 se_doc_ens_bas_stem_2019 se_doc_ens_bas_publ_2019 se_doc_ens_bas_publ_stem_2019
+
+tab cbo2002_2017_a if se_doc_ens_bas_2017 != 1, sort
+tab cbo2002_2018_a if se_doc_ens_bas_2018 != 1, sort
+tab cbo2002_2019_a if se_doc_ens_bas_2019 != 1, sort
+
+tab clas_cnae20_2017_a if se_doc_ens_bas_2017 != 1, sort
+tab clas_cnae20_2018_a if se_doc_ens_bas_2018 != 1, sort
+tab clas_cnae20_2019_a if se_doc_ens_bas_2019 != 1, sort
+
+summarize rem_med_r_2017 rem_med_r_2018 rem_med_r_2019, detail
+
+summarize rem_med_r_2017 if se_doc_ens_bas_2017 == 1, detail
+summarize rem_med_r_2018 if se_doc_ens_bas_2018 == 1, detail
+summarize rem_med_r_2019 if se_doc_ens_bas_2019 == 1, detail
+
+summarize rem_med_r_2017 if se_doc_ens_bas_publ_2017 == 1, detail
+summarize rem_med_r_2018 if se_doc_ens_bas_publ_2018 == 1, detail
+summarize rem_med_r_2019 if se_doc_ens_bas_publ_2019 == 1, detail
+
+summarize rem_med_r_2017 if se_doc_ens_bas_stem_2017 == 1, detail
+summarize rem_med_r_2018 if se_doc_ens_bas_stem_2018 == 1, detail
+summarize rem_med_r_2019 if se_doc_ens_bas_stem_2019 == 1, detail
+
+summarize rem_med_r_2017 if se_doc_ens_bas_publ_stem_2017 == 1, detail
+summarize rem_med_r_2018 if se_doc_ens_bas_publ_stem_2018 == 1, detail
+summarize rem_med_r_2019 if se_doc_ens_bas_publ_stem_2019 == 1, detail
